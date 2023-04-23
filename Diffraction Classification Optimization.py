@@ -30,23 +30,23 @@ def random_phase_mask(dimx=28, dimy=28):
     random_phases = np.exp(1j * 2 * pi * np.random.rand(dimx*dimy))
     return random_phases
 
-def fresnel_integral(img, wavelength, z):
+def fresnel_integral(modulated_img, mask, wavelength, z):
     # Compute the size of the input image
-    height, width = img.shape
+    height, width = modulated_img.shape
     # Compute the sampling interval
-    dx = dy = 1 / img.shape[0]
+    dx = dy = 1 / modulated_img.shape[0]
     # Create a meshgrid of sampling points
     x, y = np.meshgrid(np.linspace(-0.5, 0.5-dx, width), np.linspace(-0.5, 0.5-dy, height))
     # Compute the diffraction kernel
     k = 2 * pi / wavelength
-    kernel = (np.exp(1j*k*z)/ (1j * wavelength * z))*np.exp(1j * k * (x**2 + y**2) / (2 * z))
-    # Compute the Fourier transform of the image
-    fft_img = np.fft.fft2(img)
-    # Multiply the Fourier transform by the diffraction kernel
-    fft_kernel = np.fft.fft2(kernel)
-    fft_result = fft_img * fft_kernel
-    # Compute the inverse Fourier transform of the result
-    result = np.fft.ifft2(fft_result)
+    h0 = (np.exp(1j*k*z)/ (1j * wavelength * z))
+    kernel = np.exp(1j * k * (x**2 + y**2) / (2 * z))
+    # Compute the Fourier transform of the image and mask
+    fft_img = np.fft.fft2(modulated_img)
+    fft_mask = np.fft.fft2(mask)
+    # Create E(x',y',z=0)
+    E = fft_img*fft_mask
+    result = h0*np.fft.ifft2(E*kernel)
     # Compute the intensity of the result
     intensity = np.abs(result)**2
     return intensity
@@ -79,15 +79,14 @@ def fitness(mask, img_arr, labels, wavelength, z):
         #Adjust mask to the image shape
         mask = mask.reshape((28,28))
         #Apply mask to the image
-        phase_shifted_image = modulated * mask
         #Calculate the intensity after diffraction
-        intensity = fresnel_integral(phase_shifted_image, 10**-7, 100)
+        intensity = fresnel_integral(modulated, mask, wavelength, z)
         #Update score according to classification performance
         score += intensity_comparison(intensity, labels[i])
     
     return score
 
-def genetic_algorithm(wavelength, z, pic_dim=28, pop_size=20, num_generations=50, mutation_prob=0.1):
+def genetic_algorithm(wavelength, z, pic_dim=28, pop_size=20, num_generations=60, mutation_prob=0.1):
     
     #Load training data
     train_arr, labels = make_image_stack("mnist_train_cleaned.csv")
@@ -120,19 +119,23 @@ def genetic_algorithm(wavelength, z, pic_dim=28, pop_size=20, num_generations=50
             offspring[j][mutation_mask] = (np.exp(1j * 2 * pi * np.random.random()))*offspring[j][mutation_mask]
         # Combine parents and offspring to form new population
         population = np.vstack((parents, offspring))
+        if(i%10 == 0):
+            print(f'"Update: Done with {i}/{num_generations} of Iterations')
         
     # Return the best mask found
     best_index = np.argmax(fitness_values)
     best_mask = population[best_index].reshape(pic_dim,pic_dim)
     return best_mask
 
-def check_result(mask):
+def check_result(mask, wavelength, z):
     test_arr, labels = make_image_stack("mnist_test_cleaned.csv")
     
-    score = fitness(mask, test_arr, labels, 10**-7, 100)
+    score = fitness(mask, test_arr, labels, wavelength, z)
     print(f"The optimized mask classified correctly {score}/{labels.shape[0]} images, which are {100*score/test_arr.shape[0]}%!")
 
 if(__name__ == "__main__"):
     #z has to signifcantly larger than x,y, see fresnel function. FIXME - smaller z might be enough?
-    best = genetic_algorithm(wavelength=10**-7, z=100)
-    check_result(best)
+    wavelength=565*10**-9
+    z=20
+    best = genetic_algorithm(wavelength=wavelength, z=z)
+    check_result(best, wavelength, z)
