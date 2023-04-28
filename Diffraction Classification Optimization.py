@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 from numpy.random import default_rng
+import time
 pi = np.pi
 
 def make_image_stack(path):
@@ -86,7 +87,7 @@ def fitness(mask, img_arr, labels, wavelength, z):
     
     return score
 
-def genetic_algorithm(wavelength, z, pic_dim=28, pop_size=20, num_generations=60, mutation_prob=0.1):
+def genetic_algorithm(wavelength, z, pic_dim=28, pop_size=20, num_generations=50, mutation_prob=0.1):
     
     #Load training data
     train_arr, labels = make_image_stack("mnist_train_cleaned.csv")
@@ -119,23 +120,37 @@ def genetic_algorithm(wavelength, z, pic_dim=28, pop_size=20, num_generations=60
             offspring[j][mutation_mask] = (np.exp(1j * 2 * pi * np.random.random()))*offspring[j][mutation_mask]
         # Combine parents and offspring to form new population
         population = np.vstack((parents, offspring))
-        if(i%10 == 0):
-            print(f'"Update: Done with {i}/{num_generations} of Iterations')
-        
+        if((i+1)%10 == 0):
+            print(f'"Update: Done with {i+1}/{num_generations} of Iterations')
+
     # Return the best mask found
+    fitness_values = [fitness(mask, train_arr, labels, wavelength, z) for mask in population]
     best_index = np.argmax(fitness_values)
     best_mask = population[best_index].reshape(pic_dim,pic_dim)
     return best_mask
 
-def check_result(mask, wavelength, z):
+def check_result(mask, wavelength, z, start_time):
     test_arr, labels = make_image_stack("mnist_test_cleaned.csv")
     
     score = fitness(mask, test_arr, labels, wavelength, z)
+    score_percent = np.round(100*score/test_arr.shape[0], 2)
+
+    end_time = time.time()
+
+    runtime_in_seconds = end_time - start_time
+
+    hours = int(runtime_in_seconds / 3600)
+    minutes = int((runtime_in_seconds % 3600) / 60)
+    seconds = int(runtime_in_seconds % 60)
+
     print(f"The optimized mask classified correctly {score}/{labels.shape[0]} images, which are {100*score/test_arr.shape[0]}%!")
+    print("The runtime of the program was: {:02d}:{:02d}:{:02d}.".format(hours,minutes,seconds))
 
 if(__name__ == "__main__"):
+
+    start_time = time.time()
     #z has to signifcantly larger than x,y, see fresnel function. FIXME - smaller z might be enough?
     wavelength=565*10**-9
     z=20
     best = genetic_algorithm(wavelength=wavelength, z=z)
-    check_result(best, wavelength, z)
+    check_result(best, wavelength, z, start_time)
