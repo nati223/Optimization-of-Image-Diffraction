@@ -37,17 +37,14 @@ def fresnel_integral(modulated_img, mask, wavelength, z):
     # Compute the sampling interval
     dx = dy = 1 / modulated_img.shape[0]
     # Create a meshgrid of sampling points
-    x, y = np.meshgrid(np.linspace(-0.5, 0.5-dx, width), np.linspace(-0.5, 0.5-dy, height))
+    x, y = np.meshgrid(np.linspace(-2.5e-4, 2.5e-4, width), np.linspace(-2.5e-4, 2.5e-4, height))
     # Compute the diffraction kernel
     k = 2 * pi / wavelength
     h0 = (np.exp(1j*k*z)/ (1j * wavelength * z))
     kernel = np.exp(1j * k * (x**2 + y**2) / (2 * z))
-    # Compute the Fourier transform of the image and mask
-    fft_img = np.fft.fft2(modulated_img)
-    fft_mask = np.fft.fft2(mask)
     # Create E(x',y',z=0)
-    E = fft_img*fft_mask
-    result = h0*np.fft.ifft2(E*kernel)
+    E = modulated_img*mask
+    result = h0*np.fft.fft2(E*kernel)
     # Compute the intensity of the result
     intensity = np.abs(result)**2
     return intensity
@@ -57,9 +54,9 @@ def intensity_comparison(result, label):
     M, N = result.shape
 
     # Calculate the intensity in the upper half of the result array
-    upper_intensity = np.sum(np.abs(result[:M//2, :])**2)
+    upper_intensity = np.sum((result[:M//2, :]))
     # Calculate the intensity in the lower half of the result array
-    lower_intensity = np.sum(np.abs(result[M//2:, :])**2)
+    lower_intensity = np.sum((result[M//2:, :]))
     
     #Check if classification was performed correctly
     if ((upper_intensity>lower_intensity and label == 0) or (upper_intensity<lower_intensity and label ==1)):
@@ -87,7 +84,7 @@ def fitness(mask, img_arr, labels, wavelength, z):
     
     return score
 
-def genetic_algorithm(wavelength, z, pic_dim=28, pop_size=20, num_generations=50, mutation_prob=0.1):
+def genetic_algorithm(wavelength, z, pic_dim=28, pop_size=20, num_generations=60, mutation_prob=0.1):
     
     #Load training data
     train_arr, labels = make_image_stack("mnist_train_cleaned.csv")
@@ -151,6 +148,6 @@ if(__name__ == "__main__"):
     start_time = time.time()
     #z has to signifcantly larger than x,y, see fresnel function. FIXME - smaller z might be enough?
     wavelength=565*10**-9
-    z=20
+    z=0.01
     best = genetic_algorithm(wavelength=wavelength, z=z)
     check_result(best, wavelength, z, start_time)
